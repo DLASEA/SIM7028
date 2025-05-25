@@ -2,13 +2,13 @@
 const http = require("http");
 const { createProxyServer } = require("http-proxy");
 
-const TARGET = process.env.TARGET || "https://us-central1-fleetmate-5d316.cloudfunctions.net";
+const TARGET = process.env.TARGET
+  || "https://us-central1-fleetmate-5d316.cloudfunctions.net";
+
+// set up the proxy
 const proxy = createProxyServer({ target: TARGET, changeOrigin: true });
 
-// Log incoming requests
-proxy.on("start", (_, req) => {
-  console.log(`--> [IN ] ${req.method} ${req.url}`);
-});
+// outgoing logs
 proxy.on("proxyReq", (proxyReq, req) => {
   console.log(`    → [REQ]   ${TARGET}${req.url}`);
 });
@@ -21,17 +21,28 @@ proxy.on("error", (err, req, res) => {
   res.end("Proxy error");
 });
 
+// HTTP server
 const server = http.createServer((req, res) => {
-  // Health-check endpoint for “/”
+  // 1) Log every inbound request (SIM or browser)
+  console.log(`--> [IN ] ${req.method} ${req.url}`);
+
+  // 2) Health check
   if (req.method === "GET" && req.url === "/") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
     return res.end("OK");
   }
-  // All other requests get proxied
+
+  // 3) Silence the favicon noise
+  if (req.method === "GET" && req.url === "/favicon.ico") {
+    res.writeHead(204);
+    return res.end();
+  }
+
+  // 4) Everything else, hand off to http-proxy
   proxy.web(req, res);
 });
 
-const PORT = process.env.PORT || 8080;
+// pick up DO’s assigned port (or default back to 8080 locally)
+const PORT = parseInt(process.env.PORT, 10) || 8080;
 server.listen(PORT, () => {
   console.log(`Proxy listening on http://localhost:${PORT}`);
 });
